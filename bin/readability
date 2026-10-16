@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/readability_pt"
+
+options = { lang: :pt, json: false }
+OptionParser.new do |opts|
+  opts.banner = "Usage: readability [--lang pt|en] [--json] [FILE]   (reads stdin when FILE is omitted)"
+  opts.on("-l", "--lang LANG", %w[pt en], "Text language (default: pt)") { |v| options[:lang] = v.to_sym }
+  opts.on("-j", "--json", "Print JSON") { options[:json] = true }
+end.parse!
+
+text = ARGF.read.to_s.dup.force_encoding(Encoding::UTF_8).scrub
+result = ReadabilityPT.analyze(text, lang: options[:lang])
+abort "No words found." if result.nil?
+
+if options[:json]
+  puts JSON.pretty_generate(result.to_h)
+  exit
+end
+
+pt = options[:lang] == :pt
+puts pt ? "Índice Flesch: #{result.score} (#{result.level})" : "Flesch Reading Ease: #{result.score} (#{result.level})"
+puts pt ? "Frases: #{result.sentences} · Palavras: #{result.words} · Sílabas: #{result.syllables}" :
+          "Sentences: #{result.sentences} · Words: #{result.words} · Syllables: #{result.syllables}"
+puts pt ? "Média de palavras por frase: #{result.avg_words_per_sentence}" :
+          "Average words per sentence: #{result.avg_words_per_sentence}"
+unless result.long_sentences.empty?
+  puts
+  puts pt ? "Frases longas (mais de #{ReadabilityPT::LONG_SENTENCE} palavras) — considere dividir:" :
+            "Long sentences (more than #{ReadabilityPT::LONG_SENTENCE} words) — consider splitting:"
+  result.long_sentences.each { |s| puts "  • #{s[0, 120]}#{s.length > 120 ? '…' : ''}" }
+end
